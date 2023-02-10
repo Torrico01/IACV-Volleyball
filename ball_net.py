@@ -5,7 +5,7 @@ import os
 
 from keras.models import load_model
 from keras.models import model_from_json
-from keras.preprocessing.image import img_to_array 
+from keras.utils import img_to_array
 
 size = 32
 dim = 3
@@ -13,7 +13,9 @@ dim = 3
 def check_pic(pic):
   img = cv.resize(pic, (size,size))
   img = np.reshape(img,[1,size,size,dim])
-  return loaded_model.predict_classes(img)
+  predict_x=loaded_model.predict(img) 
+  classes_x=np.argmax(predict_x,axis=1)
+  return classes_x
 
 
 json_file = open('ball-net/model/model.json', 'r')

@@ -4,6 +4,12 @@ import numpy as np
 import ball_net as bn
 import sys
 
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+
+def func(x,a,b,c):
+  return a*(x-b)**2+c
+
 
 cnt = 0
 
@@ -138,6 +144,24 @@ def handle_blobs(mask, frame):
 
   k = 0
   begin_gen()
+  
+  '''
+  global prev_bb
+  x_data = []
+  y_data = []
+  if prev_bb != None and len(prev_bb.pts)>8:
+    for point in prev_bb.pts:
+      x_data.append(point[0])
+      y_data.append(point[1])
+    popt, pcov = curve_fit(func, x_data, y_data)
+    plt.plot(x_data, -func(x_data, *popt), 'g--',
+          label='fit: a=%5.3f, b=%5.3f, c=%5.3f' % tuple(popt))
+    plt.xlabel('x')
+    plt.ylabel('y')
+    plt.legend()
+    plt.show()
+  '''
+
   for c in cnts:
     rx,ry,rw,rh  = cv.boundingRect(c)
     mn = min(rw, rh)
@@ -163,8 +187,10 @@ def handle_blobs(mask, frame):
     handle_blob(int(x), int(y), int(r))
     k += 1
 
-
   end_gen()
+
+  global prev_bb
+  return prev_bb
 
 def check_blob(pic, x, y, w, h):
   dy = int(h / 5)
