@@ -9,7 +9,9 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from scipy.optimize import curve_fit
 
-################ Função quadrática para aproximar a trajetória
+import time
+
+################ Parabolic function to approximate the trajectory
 def func(x,a,b,c):
   return a*(x-b)**2+c
 ###############################################################
@@ -42,14 +44,16 @@ def test_clip(path):
   frames = []
   npframe = np.array([])
 
-  ###### Inicialização de variáveis para calcular as trajetórias
-  x_data = [] # Pontos x da trajetória
-  y_data = [] # Pontos y da trajetória
-  data_abs = [[]] # Lista de pontos [[[x1,y1],...,[xn,yn]],...] para cada trajetória detectada
-  data_popt = [] # Lista de parâmetros [[a,b,c],...] do ajuste de curva para cada trajetória detectada
-  path_counter = 0 # Conta quantas trajetórias foram detectadas
-  delta_perr = 0.4 # Delta de quanto o erro do ajuste de curva deve subir para ser considerado uma nova trajetória
-  perr_mean_ant = -delta_perr # Armazena o valor anterior do erro do ajuste de curva
+  ###### Variables for calculating the trajectory
+  x_data = [] # X data for the trajectory
+  y_data = [] # Y data for the trajectory
+  data_abs = [[]] # List of points [[[x1,y1],...,[xn,yn]],...] for each detected trajectory
+  data_popt = [[]] # List of parameters [[a,b,c],...] of the line fitting for the trajectory
+  path_counter = 0 # Keep track of how many trajectories were detected
+  delta_perr = 0.1 # Represent how much the difference in line fitting error is necessary for a new path identification
+  perr_mean = 0 # Keep the value of the covariance mean
+  perr_mean_ant = -delta_perr # Keep the last value of the line fitting error
+  frames_saved = [] # List of frames for keep track of the initial and end frames of trajectories
   ###############################################################
 
   while(True):
@@ -69,46 +73,34 @@ def test_clip(path):
 
     prev_bb = blobber.handle_blobs(mask, frame)
 
-    ############## Detecção de trajetória
+    ############## Trajectory detection
     x_data = []
     y_data = []
 
-    if prev_bb != None and len(prev_bb.pts)>8:
+    if prev_bb != None and len(prev_bb.pts)>2:
       for point in prev_bb.pts:
-        if not point in data_abs[path_counter]:
+        if not point in data_abs[path_counter] and np.mean(np.array(prev_bb.pts)[:,1]) < 200:
           x_data.append(point[0])
           y_data.append(point[1])
 
       if len(x_data)>2:
-        popt, pcov = curve_fit(func, x_data, y_data)
-        perr = np.sqrt(np.diag(pcov))
-        perr_mean = np.mean(perr)
+        try:
+          popt, pcov = curve_fit(func, x_data, y_data, maxfev=5000)
+          perr = np.sqrt(np.diag(pcov))
+          perr_mean = np.mean(perr)
+        except:
+          continue
 
-        '''
-        npframe = np.array(frame)
-        plt.imshow(npframe/256)
-        plt.plot(x_data, func(x_data, *popt), 'g--',
-              label='fit: a=%5.3f, b=%5.3f, c=%5.3f' % tuple(popt) + ', var=' + str(perr_mean))
-        plt.xlabel('x')
-        plt.ylabel('y')
-        plt.legend()
-        plt.show()
-        '''
-
-        if(perr_mean > perr_mean_ant + delta_perr):
+        # End of trajectory detected
+        if(perr_mean > perr_mean_ant + delta_perr and perr_mean < 10 and np.mean(np.array(y_data) < 180)): # Net height ~180
           data_xy = np.stack((x_data, y_data), axis=1)
           data_abs.append(data_xy)
           data_popt.append(popt)
           path_counter += 1
 
-          print("data_abs: ")
-          print(data_abs)
-          print("path_counter: ")
-          print(path_counter)
-          print("data_popt: ")
-          print(data_popt)
+          frames_saved.append(frame)
 
-        perr_mean_ant = perr_mean
+      perr_mean_ant = perr_mean
     ######################################
 
     blobber.draw_ball_path(frame)
@@ -121,21 +113,61 @@ def test_clip(path):
     frames.append(frame)
     npframe = np.array(frame)
 
-  ############## Plotando todas as trajetórias
+  ############## Combining trajectories if parameters are similar
+  print("data_abs before: ")
+  print(data_abs)
+  da_cnt = 1
+  delta = 0.2
+  for d_popt_num in range(1,len(data_popt)-1):
+    a_curr = data_popt[d_popt_num][0]
+    a_next = data_popt[d_popt_num+1][0]
+    b_curr = data_popt[d_popt_num][1]
+    b_next = data_popt[d_popt_num+1][1]
+    c_curr = data_popt[d_popt_num][2]
+    c_next = data_popt[d_popt_num+1][2]
+    if ((b_next < b_curr+(b_curr*delta) and b_next > b_curr-(b_curr*delta))
+    and (c_next < c_curr+(c_curr*delta) and c_next > c_curr-(c_curr*delta))):
+      print("Here! At d_popt_num = " + str(d_popt_num))
+      if (len(data_abs[d_popt_num]) > len(data_abs[d_popt_num+1])):
+        data_abs = np.delete(data_abs, d_popt_num+1)
+        data_popt = np.delete(data_popt, d_popt_num+1)
+      else:
+        data_abs = np.delete(data_abs, d_popt_num)
+        data_popt = np.delete(data_popt, d_popt_num)
+      da_cnt += 1
+    da_cnt += 1
+    if (da_cnt >= len(data_popt)): break
+  print("data_abs after: ")
+  print(data_abs)
+  ######################################
+
+  ############## Plotting trajectories
   colors = ['b','g','r','c','m','y','k','w','b','g','r','c','m','y','k','w','b','g','r','c','m','y','k','w']
   da_cnt = 0
   color_cnt = 0
   plt.imshow(npframe/256)
   for d_popt in data_popt:
-    if (d_popt[0] > 0 and len(data_abs[da_cnt][:,0])>10):
-      new_x_data = np.arange(min(data_abs[da_cnt][:,0])-100, max(data_abs[da_cnt][:,0])+100, 1)
-      plt.plot(new_x_data, func(new_x_data, *d_popt), color=colors[color_cnt], label=str(da_cnt)+", total pts: "+str(len(data_abs[da_cnt][:,0])))
+    if (da_cnt != 0 and d_popt[0] > 0 and len(data_abs[da_cnt][:,0])>3):
+      x_data = data_abs[da_cnt][:,0]
+      if x_data[-1]-x_data[-2] > 0: new_x_data = np.arange(x_data[-1], x_data[-1]+10*(x_data[-1]-x_data[-2]), 1)
+      if x_data[-1]-x_data[-2] < 0: new_x_data = np.arange(x_data[-1], x_data[-1]+10*(x_data[-1]-x_data[-2]), -1)
+      plt.plot(x_data, func(x_data, *d_popt), color=colors[color_cnt], label=str(color_cnt+1)+" - total points: "+str(len(data_abs[da_cnt][:,0])))
+      plt.plot(new_x_data, func(new_x_data, *d_popt), colors[color_cnt]+'--')
       color_cnt += 1
     da_cnt += 1
   plt.xlabel('x')
   plt.ylabel('y')
   plt.legend()
   plt.show()
+
+  for frame_saved_num in range(len(frames_saved)-1):
+    fig, axs = plt.subplots(2)
+    fig.suptitle('Vertically stacked subplots')
+    npframe1 = np.array(frames_saved[frame_saved_num])
+    npframe2 = np.array(frames_saved[frame_saved_num+1])
+    axs[0].imshow(npframe1/256)
+    axs[1].imshow(npframe2/256)
+    plt.show()
   ######################################
 
   #print("Saving GIF file")
