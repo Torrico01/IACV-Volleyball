@@ -4,11 +4,10 @@ import os
 import ball_net as bn
 import blobber
 import sys
-import imageio
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from scipy.optimize import curve_fit
-
+maxfev_test = 2000
 ################ Função quadrática para aproximar a trajetória
 def func(x,a,b,c):
   return a*(x-b)**2+c
@@ -62,6 +61,9 @@ def test_clip(path):
 
     frame = cv.resize(frame, (int(w/2),int(h/2)))
     mask = backSub.apply(frame)
+    kernel = np.ones((5,5), np.uint8)
+    mask = cv.morphologyEx(mask, cv.MORPH_OPEN, kernel)
+    mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel)
 
     mask = cv.dilate(mask, None)
     mask = cv.GaussianBlur(mask, (15, 15),0)
@@ -80,7 +82,7 @@ def test_clip(path):
           y_data.append(point[1])
 
       if len(x_data)>2:
-        popt, pcov = curve_fit(func, x_data, y_data)
+        popt, pcov = curve_fit(func, x_data, y_data, maxfev = maxfev_test)
         perr = np.sqrt(np.diag(pcov))
         perr_mean = np.mean(perr)
 

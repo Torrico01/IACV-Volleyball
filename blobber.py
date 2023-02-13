@@ -261,14 +261,16 @@ def test_clip(path):
 
     frame = cv.resize(frame, (w, h))
     mask = backSub.apply(frame)
-
+    kernel = np.ones((5,5), np.uint8)
+    mask = cv.morphologyEx(mask, cv.MORPH_OPEN, kernel)
+    mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel)
     mask = cv.dilate(mask, None)
     mask = cv.GaussianBlur(mask, (15, 15),0)
     ret,mask = cv.threshold(mask,0,255,cv.THRESH_BINARY | cv.THRESH_OTSU)
 
     handle_blobs(mask, frame)
     pic = draw_blobs(w, h)
-    cv.imshow('frame', pic)
+    cv.imshow('frame', mask)
     cv.imwrite("frames/frame-{:03d}.jpg".format(n), pic)    
     if cv.waitKey(10) == 27:
       break

@@ -1,6 +1,7 @@
 import sys
 import cv2 as cv
 import os
+import numpy as np
 
 def check_dir(path):
   if path is None:
@@ -53,6 +54,10 @@ def get_high_blobs(clip_path, out_path = None, clr_out_path = None):
         break
 
       mask = backSub.apply(frame)
+      kernel = np.ones((5,5), np.uint8)
+      mask = cv.morphologyEx(mask, cv.MORPH_OPEN, kernel)
+      mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel)
+      mask2 = mask
       mask = cv.GaussianBlur(mask, (7, 7),0)
       ret,mask = cv.threshold(mask,0,255,cv.THRESH_BINARY | cv.THRESH_OTSU)
 
